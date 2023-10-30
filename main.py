@@ -1,95 +1,59 @@
-# Import necessary modules
-import json  # For working with JSON data format
-import os  # For operating system related tasks like creating directories
-import tkinter as tk  # GUI toolkit
-from tkinter import filedialog  # Dialog for file selection
-import whisper  # OpenAI's Whisper module for speech-to-text
+import ssl
+import urllib.request
+import tkinter as tk
+from tkinter import filedialog
+import json
+import os
+from pydub import AudioSegment
+import whisper
+
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
-# Define a function to save the transcription as a .txt file
-def save_as_txt(path, transcription):
-    # Open a file in write mode
-    with open(path, 'w') as f:
-        # Write the transcription to the file
-        f.write(transcription)
+# Now you can proceed to use urllib or any other library that fetches data over HTTPS
 
 
-# Define a function to save the transcription as a .json file
-def save_as_json(path, transcription):
-    # Create a dictionary to hold the transcription
-    data = {
-        "transcription": transcription
-    }
-    # Open a file in write mode
-    with open(path, 'w') as f:
-        # Dump the dictionary as JSON into the file
-        json.dump(data, f, indent=4)
+def convert_audio(file_path):
+    audio = AudioSegment.from_file(file_path)
+    audio = audio.set_channels(1)  # Ensure mono audio
+    wav_path = "temp.wav"
+    audio.export(wav_path, format="wav")
+    return wav_path
 
 
-# Define the main App class for the GUI
-class App:
-    # Initialization method for the App class
-    def __init__(self, file):
-        # Reference to the main tkinter window
-        self.root = file
-        # Load the Whisper model for speech-to-text
-        self.model = whisper.load_model("base")
-        # Set the title for the main window
-        self.root.title("Whisper STT GUI")
-
-        # Create a label in the window with instructions
-        self.label = tk.Label(file, text="Upload an audio file for transcription:")
-        # Add some vertical padding and display the label
-        self.label.pack(pady=20)
-
-        # Create a button to upload audio files
-        self.btn_upload = tk.Button(file, text="Upload", command=self.upload_audio)
-        # Add some vertical padding and display the button
-        self.btn_upload.pack(pady=10)
-
-        # Create a text widget to display the transcription
-        self.transcription_text = tk.Text(file, height=20, width=80)
-        # Add some vertical padding and display the text widget
-        self.transcription_text.pack(pady=20)
-
-    # Define a method to transcribe audio using the Whisper model
-    def transcribe(self, audio_path):
-        # Use the Whisper model to transcribe the audio
-        result = self.model.transcribe(audio_path)
-        # Return the transcription text
-        return result["text"]
-
-    # Define a method to upload audio and get its transcription
-    def upload_audio(self):
-        # Display a file dialog to select an audio file
-        file_path = filedialog.askopenfilename(title="Select an audio file", filetypes=(
-            ("MP3 files", "*.mp3"), ("WAV files", "*.wav"), ("FLAC files", "*.flac"), ("All files", "*.*")))
-        # Exit the method if no file is selected
-        if not file_path:
-            return
-        # Get the transcription for the selected audio file
-        transcription = self.transcribe(file_path)
-        # Display the transcription in the text widget
-        self.transcription_text.insert(tk.END, transcription)
-
-        # Save the transcription in various formats
-        # Extract the name of the audio file without its extension
-        base_name = os.path.basename(file_path).rsplit('.', 1)[0]
-        # Define a directory to save the transcription files
-        output_directory = "transcripts"
-        # Create the directory if it doesn't exist
-        os.makedirs(output_directory, exist_ok=True)
-        # Save the transcription as .txt
-        save_as_txt(os.path.join(output_directory, f"{base_name}.txt"), transcription)
-        # Save the transcription as .json
-        save_as_json(os.path.join(output_directory, f"{base_name}.json"), transcription)
+def whisper_transcribe(audio_path):
+    model = whisper.load_model("small")  # Change the model size as per your requirement
+    result = model.transcribe(audio_path)
+    return result["text"]
 
 
-# Main execution
-if __name__ == "__main__":
-    # Create the main tkinter window
-    root = tk.Tk()
-    # Instantiate the App class
-    app = App(root)
-    # Start the tkinter main loop
-    root.mainloop()
+def save_transcription(transcription):
+    if not os.path.exists('transcripts'):
+        os.makedirs('transcripts')
+    with open('transcripts/transcription.txt', 'w') as txt_file:
+        txt_file.write(transcription)
+    with open('transcripts/transcription.json', 'w') as json_file:
+        json.dump({'transcription': transcription}, json_file)
+
+
+def on_upload():
+    file_path = filedialog.askopenfilename()
+    if file_path:
+        wav_path = convert_audio(file_path)
+        transcription = whisper_transcribe(wav_path)
+        if transcription:
+            transcription_display.delete('1.0', tk.END)
+            transcription_display.insert(tk.END, transcription)
+            save_transcription(transcription)
+
+
+root = tk.Tk()
+root.title("Audio Transcription App")
+
+upload_btn = tk.Button(root, text="Upload Audio File", command=on_upload)
+upload_btn.pack()
+
+transcription_display = tk.Text(root)
+transcription_display.pack()
+
+root.mainloop()
